@@ -1,28 +1,16 @@
 import React, { useState, useEffect } from "react";
+import { makeStyles } from '@material-ui/core/styles';
+import Box from '@material-ui/core/Box';
+
 import Graph from "./vis-network";
-import { g } from '../gremlin';
+import Details from "./details";
+import Menu from './menu'
+import { g } from '../gremlin/connection';
+import {mapToJson} from '../gremlin/utils'
 
 const gremlin = require('gremlin');
 const { within } = gremlin.process.P;
 const { out, outE, inV, in_, inE, coalesce, constant, project } = gremlin.process.statics;
-
-const mapToJson = (map) => {
-  const properties = {};
-  map.forEach((item, key) => {
-    if (typeof key === 'object') {
-      if (item instanceof Map) {
-        properties[key.elementName] = mapToJson(item)
-      } else {
-        properties[key.elementName] = item;
-      }
-    } else {
-      const value =
-        typeof item === 'string' || typeof item === 'number' ? item : item;
-      properties[key] = value;
-    }
-  });
-  return properties;
-};
 
 const stringToMultiLine = (str, maxLength) => {
   let multiArr = [];
@@ -35,7 +23,7 @@ const stringToMultiLine = (str, maxLength) => {
         count = count + 1;
         multiArr[count] = [word];
       } else {
-        multiArr[count].push(word);§
+        multiArr[count].push(word);
       }
     })
     multiArr = multiArr.map(line => line.join(' '));
@@ -43,11 +31,18 @@ const stringToMultiLine = (str, maxLength) => {
   return multiArr.join('\n');
 }
 
+const setIdAsKey = (arr) => {
+  const lookup = {};
+  arr.forEach(item => {
+    lookup[item.id] = item;
+  })
+  return lookup;
+}
+
 const getNodes = () => {
-  console.log('getting nodes...')
   return g
-  .V('c8d56a47-063a-46a9-a664-4df2d350a992')
-  // .hasLabel('Systems')
+  .V('a1cbb927-f960-4ee4-bfe3-1d11325825f2')
+  // .V().hasLabel('Systems')
   .not(inE())
   .emit()
   .repeat(out()).until(outE().count().is(0))
@@ -102,19 +97,22 @@ const options = {
     }
   },
   physics: { // https://visjs.github.io/vis-network/docs/network/physics.html
-    enabled: false,
+    enabled: true,
     solver: "barnesHut", // barnesHut, repulsion, hierarchicalRepulsion, forceAtlas2Based
     barnesHut: {
-      gravitationalConstant: -1000,
-      centralGravity: 10,
-      springLength: 70,
-      avoidOverlap: 1
+      theta: 0.5,
+      gravitationalConstant: -2000,
+      centralGravity: 0.3,
+      springLength: 95,
+      springConstant: 0.04,
+      damping: 0.09,
+      avoidOverlap: 0
     },
     stabilization: { iterations: 2500 }
   },
   layout: {
     hierarchical: {
-      enabled: true,
+      enabled: false,
       levelSeparation: 200,
       nodeSpacing: 100,
       treeSpacing: 200,
@@ -136,9 +134,48 @@ const options = {
   }
 };
 
+const useStyles = makeStyles((theme) => ({
+  root: {
+    display: 'flex',
+    height:"100vh", 
+    width:"100wh"
+  },
+  details: {
+    position: 'absolute',
+    top: '100px',
+    left: '100px',
+    height: '80vh',
+    width: '300px'
+  }
+}));
+
 const Main = () => {
-  const [data, setData] = useState({nodes: [], edges: []});
+  console.log('render...')
+  const classes = useStyles();
+
+  const [data, setData] = useState({});
   const [graphData, setGraphData] = useState({nodes: [], edges: []})
+  const [showDetails, setShowDetails] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null)
+
+  const onSelect = ({nodes, edges}) => {
+    if (nodes.length === 1) {
+      const [selectedItemId] = nodes;
+      setSelectedItemId(selectedItemId)
+      setShowDetails(true);
+    } else if (edges.length === 1) {
+      const [selectedItemId] = edges;
+      setSelectedItemId(selectedItemId)
+      setShowDetails(true);
+    } else {
+      setShowDetails(false);
+    }
+    return;
+  }
+
+  const events = {
+    select: onSelect
+  }
   
   useEffect(() => {
     console.log('useEffect().....')
@@ -148,18 +185,28 @@ const Main = () => {
       const nodeIds = nodes.map(node => node.id)
       const edges = await getEdges(nodeIds)
       // console.log('edges ->', edges)
-      setData({nodes, edges});
+      const nodesLookup = setIdAsKey(nodes)
+      const edgesLookup = setIdAsKey(edges)
+      setData({...nodesLookup, ...edgesLookup});
       const graphNodes = nodes.map(({id, name}) => ({id, label: stringToMultiLine(name, 25)}))
       const graphEdges = edges.map(({id, label, IN, OUT }) => ({id, from: OUT.id, to: IN.id}))
       setGraphData({nodes: graphNodes, edges: graphEdges})
     }
     getData();
   },[]);
-  
 
   return (
-    <div style={{height:"100vh", width:"100%"}}>
-      <Graph data={graphData} options={options}/>
+    <div className={classes.root}>
+      <Graph data={graphData} options={options} events={events}/>
+      <Menu />
+      <Box
+        p={2}
+        position="absolute"
+        top={100}
+        left="2%"
+      >
+        <Details show={showDetails} item={selectedItemId ? data[selectedItemId]: {}} className={classes.details}/>
+      </Box>
     </div>
     )
 }

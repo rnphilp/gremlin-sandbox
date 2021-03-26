@@ -1,12 +1,21 @@
 import React, { useEffect, useRef } from 'react';
 import PT from "prop-types";
+import { makeStyles } from '@material-ui/core/styles';
 import { DataSet } from "vis-data";
 import { Network } from "vis-network";
 
+const useStyles = makeStyles((theme) => ({
+  root: {
+    // display: 'flex',
+    width: '100%',
+    height: '100%',
+  },
+}));
+
 const VisNetwork = (props) => {
-  const {data: {nodes, edges}, options} = props;
-  console.log('nodes =>', nodes)
-  console.log('edges =>', edges)
+  const classes = useStyles();
+
+  const {data: {nodes, edges}, options, events = []} = props;
   // A reference to the div rendered by this component
   const domNode = useRef(null);
 
@@ -22,12 +31,15 @@ const VisNetwork = (props) => {
         edges: visEdges
       };
       network.current = new Network(domNode.current, visData, options);
+      Object.entries(events).forEach(([name, func]) => {
+        network.current.on(name, func)
+      });
     },
     [domNode, network, nodes, edges, options]
   );
 
   return (
-    <div ref = { domNode } style={{ width: "100%", height: "100%" }} />
+    <div ref={domNode} className={classes.root}/>
   );
 };
 
@@ -36,7 +48,8 @@ VisNetwork.PT = {
     nodes: PT.array,
     edges: PT.array
   }),
-  options: PT.object
+  options: PT.object,
+  events: PT.array
 }
 
 export default VisNetwork;
